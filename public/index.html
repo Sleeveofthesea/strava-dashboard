@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Activity Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f12;
+    --surface: #14171c;
+    --surface2: #1c2029;
+    --border: #252932;
+    --text: #e8eaf0;
+    --muted: #5a6070;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    padding: 20px 14px 56px;
+  }
+
+  /* ── Loading / Auth overlay ──────────────────────────── */
+  #app-overlay {
+    position: fixed; inset: 0; z-index: 100;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+  }
+  #app-overlay h1 { font-family: 'Fraunces', serif; font-weight: 300; font-size: 28px; color: var(--text); }
+  #overlay-loading { font-size: 13px; color: var(--muted); }
+  #overlay-auth { display: none; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+  #overlay-auth p { font-size: 13px; color: var(--muted); max-width: 260px; }
+  #overlay-auth a {
+    display: inline-block; background: #fc4c02; color: white;
+    padding: 10px 24px; border-radius: 8px; text-decoration: none;
+    font-size: 13px; font-weight: 600; font-family: 'DM Mono', monospace;
+  }
+  #overlay-auth a:hover { background: #e04300; }
+  #overlay-logout { font-size: 11px; color: var(--muted); cursor: pointer; text-decoration: underline; margin-top: 4px; }
+
+  /* ── Metric toggle panel ─────────────────────────────── */
+  .metric-panel {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 18px;
+  }
+  .metric-btn {
+    font-family: 'DM Mono', monospace;
+    padding: 9px 6px 8px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+    line-height: 1.2;
+  }
+  .metric-btn .mbtn-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
+  .metric-btn .mbtn-sub   { font-size: 10px; color: var(--muted); font-weight: 400; }
+  .metric-btn.active {
+    background: var(--surface2); color: var(--text);
+    border-color: var(--muted);
+  }
+  .metric-btn.active .mbtn-label { color: var(--text); }
+  .metric-btn.active .mbtn-sub   { color: #8891a0; }
+
+  /* ── Stats ───────────────────────────────────────────── */
+  .stats-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 16px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 11px 10px; }
+  .stat-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; font-weight: 600; }
+  .stat-sublabel { font-size: 9px; color: var(--muted); font-style: italic; margin-top: 2px; }
+  .stat-value { font-size: clamp(18px,4.5vw,26px); font-weight: 600; line-height: 1; }
+  .stat-unit  { font-size: 11px; color: var(--muted); margin-top: 3px; font-weight: 500; }
+
+  /* ── Chart card ──────────────────────────────────────── */
+  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px 13px 14px; margin-bottom: 12px; }
+  .chart-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+  .chart-title { font-family: 'Fraunces', serif; font-weight: 300; font-size: 19px; }
+  .zoom-hint { font-size: 10px; color: var(--muted); font-weight: 500; align-self: center; letter-spacing: 0.04em; }
+
+  .controls { display: flex; gap: 5px; flex-wrap: wrap; }
+  .pill-group { display: flex; gap: 2px; background: var(--surface2); border-radius: 8px; padding: 3px; }
+  .pill {
+    font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500;
+    padding: 4px 9px; border-radius: 5px; border: none;
+    background: transparent; color: var(--muted); cursor: pointer; transition: all 0.15s;
+  }
+  .pill.active { background: var(--border); color: var(--text); font-weight: 600; }
+
+  /* ── SVG chart ───────────────────────────────────────── */
+  .chart-wrap { position: relative; width: 100%; }
+  svg.chart { display: block; overflow: visible; }
+  .grid-line    { stroke: var(--border); stroke-width: 1; }
+  .grid-label   { fill: #7a8494; font-family: 'DM Mono',monospace; font-size: 10px; font-weight: 500; }
+  .grid-label-r { fill: #94a3b8; font-family: 'DM Mono',monospace; font-size: 10px; font-weight: 500; }
+  .month-label  { fill: #9aa0ae; font-family: 'DM Mono',monospace; font-size: 11px; font-weight: 600; }
+  .month-divider { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 2; }
+  .bar-segment  { cursor: pointer; }
+  .bar-segment:hover { filter: brightness(1.2); }
+  .elev-line { stroke: #94a3b8; stroke-width: 1.5; fill: none; stroke-linejoin: round; }
+  .elev-dot  { fill: #94a3b8; }
+  .elev-area { fill: url(#elevGrad); pointer-events: none; }
+  .total-line { stroke: rgba(255,255,255,0.18); stroke-width: 1.5; stroke-dasharray: 3 3; fill: none; }
+
+  /* ── Legend ──────────────────────────────────────────── */
+  .legend { display: flex; flex-direction: column; gap: 7px; margin-top: 14px; }
+  .legend-group { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .legend-group-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); min-width: 50px; font-weight: 600; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #9aa0ae; cursor: pointer; transition: all 0.15s; user-select: none; font-weight: 500; }
+  .legend-item:hover { color: var(--text); }
+  .legend-item.hidden { opacity: 0.28; }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.5); }
+
+  /* ── Tooltip — static panel at bottom of chart card ─── */
+  .tooltip {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 14px; font-size: 12px;
+    display: none; margin-top: 12px;
+  }
+  .tooltip.visible { display: block; }
+  .tt-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .tt-week  { font-size: 12px; color: var(--text); font-weight: 700; }
+  .tt-close { font-size: 20px; color: var(--muted); cursor: pointer; line-height: 1; padding: 4px 6px; user-select: none; border-radius: 6px; margin: -4px -6px; }
+  .tt-close:hover { color: var(--text); background: var(--border); }
+  .tt-body { display: flex; flex-wrap: wrap; gap: 10px; }
+  .tt-group { min-width: 120px; flex: 1; }
+  .tt-group-label { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; }
+  .tt-row   { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 3px; }
+  .tt-sport { display: flex; align-items: center; gap: 5px; font-weight: 500; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .tt-total-row { display: flex; justify-content: space-between; align-items: center; padding-top: 8px; margin-top: 6px; border-top: 1px solid var(--border); font-weight: 600; font-size: 12px; }
+  .tt-overlay-row { display: flex; justify-content: space-between; gap: 10px; margin-top: 4px; font-size: 11px; color: #94a3b8; }
+  .tt-cat-total { font-size: 10px; color: var(--muted); font-weight: 500; margin-top: 2px; }
+  .tt-activities { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .tt-act-header { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; margin-bottom: 6px; }
+  .tt-act-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px; align-items: center; margin-bottom: 4px; font-size: 11px; }
+  .tt-act-name { display: flex; align-items: center; gap: 5px; }
+  .tt-act-date { color: var(--muted); font-size: 10px; }
+  .tt-act-mi   { text-align: right; min-width: 42px; }
+  .tt-act-el   { text-align: right; min-width: 50px; color: #94a3b8; font-size: 10px; }
+  .axis-label  { fill: #5a6070; font-family: 'DM Mono',monospace; font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+
+  /* ── Calendar day popup ──────────────────────────────── */
+  .cal-popup {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 14px; padding: 14px; margin-top: 10px;
+    display: none;
+  }
+  .cal-popup.visible { display: block; }
+  .cal-popup-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .cal-popup-date { font-family: 'Fraunces', serif; font-weight: 300; font-size: 17px; color: var(--text); }
+  .cal-popup-close { font-size: 20px; color: var(--muted); cursor: pointer; padding: 4px 8px; border-radius: 6px; line-height: 1; user-select: none; }
+  .cal-popup-close:hover { color: var(--text); background: var(--border); }
+  .cal-popup-acts { display: flex; flex-direction: column; gap: 8px; }
+
+  /* Each activity row */
+  .cal-popup-act {
+    display: flex; align-items: center; gap: 0;
+    background: var(--surface); border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .cal-popup-act-bar { width: 4px; align-self: stretch; flex-shrink: 0; }
+  .cal-popup-act-body { display: flex; align-items: center; gap: 10px; padding: 10px 12px; flex: 1; }
+  .cal-popup-act-icon { font-size: 22px; flex-shrink: 0; }
+  .cal-popup-act-info { flex: 1; }
+  .cal-popup-act-name { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+  .cal-popup-act-stats { display: flex; gap: 6px; flex-wrap: wrap; }
+  .cal-popup-stat {
+    display: flex; flex-direction: column; align-items: center;
+    background: var(--surface2); border-radius: 6px; padding: 4px 8px; min-width: 46px;
+  }
+  .cal-popup-stat-val { font-size: 12px; font-weight: 700; color: var(--text); }
+  .cal-popup-stat-lbl { font-size: 9px; color: var(--muted); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; margin-top: 1px; }
+  .cal-popup-empty { font-size: 12px; color: var(--muted); font-style: italic; text-align: center; padding: 8px 0; }
+
+  /* ── Calendar ────────────────────────────────────────── */
+  .cal-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px 13px; margin-bottom: 12px; display: none; }
+  .cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .cal-nav { display: flex; align-items: center; gap: 10px; }
+  .cal-month-title { font-family: 'Fraunces', serif; font-weight: 300; font-size: 20px; }
+  .cal-arrow {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: #9aa0ae; border-radius: 6px; width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 16px; transition: all 0.15s; user-select: none;
+  }
+  .cal-arrow:hover { color: var(--text); border-color: var(--muted); }
+  .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 3px; }
+  .cal-dow  { font-size: 11px; color: #7a8494; text-align: center; padding: 3px 0 6px; letter-spacing: 0.06em; font-weight: 600; }
+  .cal-day  {
+    border-radius: 7px; border: 1px solid var(--border);
+    background: var(--surface2); min-height: 90px;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .cal-day.empty { background: transparent; border-color: transparent; }
+  .cal-day.today { border-color: #6b7280; }
+  .cal-day-num {
+    font-size: 11px; color: #6b7280; padding: 4px 5px 3px;
+    line-height: 1; flex-shrink: 0; font-weight: 600;
+  }
+  .cal-day.today .cal-day-num { color: var(--text); }
+  /* Activities stack vertically inside the day cell */
+  .cal-activities { display: flex; flex-direction: column; flex: 1; gap: 0; }
+  .cal-act {
+    flex: 1; min-height: 22px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 1px;
+    border-top: 1px solid rgba(0,0,0,0.3);
+    padding: 2px 2px;
+    overflow: hidden;
+  }
+  .cal-act:first-child { border-top: none; }
+  .cal-act-icon { font-size: 18px; line-height: 1; display: block; text-align: center; }
+  /* Calendar legend */
+  .cal-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .cal-legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #9aa0ae; font-weight: 500; }
+  .cal-legend-swatch { width: 10px; height: 10px; border-radius: 2px; border: 1px solid rgba(0,0,0,0.4); flex-shrink: 0; }
+
+  /* ── Breakdown ───────────────────────────────────────── */
+  .breakdown-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px 13px; }
+  .breakdown-title { font-family: 'Fraunces', serif; font-weight: 300; font-size: 19px; margin-bottom: 3px; }
+  .breakdown-sub   { font-size: 11px; color: #7a8494; margin-bottom: 14px; font-weight: 500; }
+  .bd-group        { margin-bottom: 16px; }
+  .bd-group-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 7px; padding-bottom: 5px; border-bottom: 1px solid var(--border);
+  }
+  .bd-group-label { font-size: 11px; letter-spacing: 0.11em; text-transform: uppercase; color: #7a8494; font-weight: 700; }
+  .bd-group-total { font-size: 13px; color: var(--text); font-weight: 600; }
+  .sport-row  { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+  .sport-icon { font-size: 15px; width: 24px; text-align: center; }
+  .sport-info { flex: 1; }
+  .sport-name-row { font-size: 12px; margin-bottom: 4px; font-weight: 500; }
+  .sport-bar-track { height: 4px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+  .sport-bar-fill  { height: 100%; border-radius: 3px; transition: width 0.8s cubic-bezier(0.16,1,0.3,1); }
+  .sport-val  { font-size: 12px; min-width: 64px; text-align: right; font-weight: 600; }
+
+  /* ── Chart scrollbar ─────────────────────────────────── */
+  .chart-scrollbar {
+    position: relative; height: 5px; margin-top: 10px;
+    background: var(--surface2); border-radius: 3px; cursor: pointer;
+  }
+  .chart-scrollbar-thumb {
+    position: absolute; height: 100%; min-width: 16px;
+    background: var(--muted); border-radius: 3px;
+    cursor: grab; transition: background 0.15s;
+  }
+  .chart-scrollbar-thumb:hover { background: #8891a0; }
+  .chart-scrollbar-thumb.dragging { background: #b0bac8; cursor: grabbing; }
+</style>
+</head>
+<body>
+
+<!-- ── Loading / Auth overlay ─────────────────────────────────────────────── -->
+<div id="app-overlay">
+  <h1>Activity Dashboard</h1>
+  <div id="overlay-loading">Loading…</div>
+  <div id="overlay-auth">
+    <p>Connect your Strava account to view your activity history</p>
+    <a href="/auth/login">Connect with Strava</a>
+  </div>
+</div>
+
+<!-- Metric toggle panel -->
+<div class="metric-panel">
+  <button class="metric-btn active" data-metric="mileage">
+    <span class="mbtn-label">Miles</span>
+    <span class="mbtn-sub">distance</span>
+  </button>
+  <button class="metric-btn" data-metric="elevation">
+    <span class="mbtn-label">Elevation</span>
+    <span class="mbtn-sub">feet gained</span>
+  </button>
+  <button class="metric-btn" data-metric="hours">
+    <span class="mbtn-label">Hours</span>
+    <span class="mbtn-sub">time active</span>
+  </button>
+  <button class="metric-btn" data-metric="calendar">
+    <span class="mbtn-label">Calendar</span>
+    <span class="mbtn-sub">daily view</span>
+  </button>
+</div>
+
+<!-- Stats (hidden in calendar mode) -->
+<div class="stats-row" id="stats-row">
+  <div class="stat-card">
+    <div class="stat-label">Selected week</div>
+    <div class="stat-value" id="stat-week">—</div>
+    <div class="stat-unit"  id="stat-week-unit"></div>
+    <div class="stat-sublabel" id="stat-week-label">click a bar</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Period avg</div>
+    <div class="stat-value" id="stat-avg">—</div>
+    <div class="stat-unit"  id="stat-avg-unit"></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Best week</div>
+    <div class="stat-value" id="stat-best">—</div>
+    <div class="stat-unit"  id="stat-best-unit"></div>
+  </div>
+</div>
+
+<!-- Bar chart card -->
+<div class="chart-card" id="chart-card">
+  <div class="chart-header">
+    <div class="chart-title" id="chart-title">Weekly Mileage</div>
+    <div class="zoom-hint" id="zoom-hint">pinch or scroll to zoom</div>
+  </div>
+  <div class="chart-wrap" id="chart-wrap">
+    <svg class="chart" id="main-chart">
+      <defs>
+        <linearGradient id="elevGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#94a3b8" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="#94a3b8" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+    </svg>
+  </div>
+  <div class="chart-scrollbar" id="chart-scrollbar">
+    <div class="chart-scrollbar-thumb" id="chart-scrollbar-thumb"></div>
+  </div>
+  <div class="legend" id="legend"></div>
+  <div class="tooltip" id="tooltip"></div>
+</div>
+
+<!-- Calendar card -->
+<div class="cal-card" id="cal-card">
+  <div class="cal-header">
+    <div class="cal-nav">
+      <div class="cal-arrow" id="cal-prev">‹</div>
+      <div class="cal-month-title" id="cal-month-title">Loading…</div>
+      <div class="cal-arrow" id="cal-next">›</div>
+    </div>
+  </div>
+  <div class="cal-grid" id="cal-grid"></div>
+  <div class="cal-popup" id="cal-popup"></div>
+  <div class="cal-legend" id="cal-legend"></div>
+</div>
+
+<!-- Breakdown (hidden in calendar mode) -->
+<div class="breakdown-card" id="breakdown-card">
+  <div class="breakdown-title">Sport Breakdown</div>
+  <div class="breakdown-sub" id="bd-sub"></div>
+  <div id="breakdown"></div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// SPORT DEFINITIONS
+// ─────────────────────────────────────────────────────────────────────────────
+const sportGroups = [
+  { key:'foot', label:'On Foot', sports:[
+    { key:'road_run',      label:'Road Run',       icon:'🏃', color:'#f97316', miKey:'road_run',      elKey:'road_runE',      hrKey:'road_runH'      },
+    { key:'trail_run',     label:'Trail Run',      icon:'🏃', color:'#fb923c', miKey:'trail_run',     elKey:'trail_runE',     hrKey:'trail_runH'     },
+    { key:'hike',          label:'Hiking',         icon:'⛰️', color:'#fdba74', miKey:'hike',          elKey:'hikeE',          hrKey:'hikeH'          },
+  ]},
+  { key:'climb', label:'Climbing', sports:[
+    { key:'outdoor_climb', label:'Outdoor Climb',  icon:'🧗', color:'#e879f9', miKey:'outdoor_climb', elKey:'outdoor_climbE', hrKey:'outdoor_climbH' },
+    { key:'indoor_climb',  label:'Indoor Climb',   icon:'🏋️', color:'#f0abfc', miKey:null,            elKey:null,             hrKey:'indoor_climbH'  },
+  ]},
+  { key:'snow', label:'Snow', sports:[
+    { key:'ski',          label:'Backcountry Ski', icon:'⛷️', color:'#38bdf8', miKey:'ski',          elKey:'skiE',          hrKey:'skiH'          },
+    { key:'nordic',       label:'Nordic Ski',      icon:'🎿', color:'#7dd3fc', miKey:'nordic',       elKey:'nordicE',       hrKey:'nordicH'       },
+  ]},
+  { key:'wheels', label:'Cycling', sports:[
+    { key:'road_bike',     label:'Road Bike',      icon:'🚴', color:'#22c55e', miKey:'road_bike',     elKey:'road_bikeE',     hrKey:'road_bikeH'     },
+    { key:'mtb',           label:'Mtn Bike',       icon:'🚵', color:'#86efac', miKey:'mtb',           elKey:'mtbE',           hrKey:'mtbH'           },
+  ]},
+];
+const allSports = sportGroups.flatMap(g => g.sports);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DATA — populated at runtime from /api/data
+// ─────────────────────────────────────────────────────────────────────────────
+let allWeeks     = [];   // [{label, month, year, road_run, road_runE, road_runH, …}]
+let weekActsData = [];   // parallel to allWeeks; each entry = activity array for tooltip
+let calendarData = {};   // {year: {month(1-based): [{day, acts:[{key,mi,elev,hr,name}]}]}}
+
+function getWeekActivities(weekIndex) {
+  return weekActsData[weekIndex] || [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+let activeMetric = 'mileage';
+let hiddenSports = new Set();
+
+const _now = new Date();
+let calYear = _now.getFullYear(), calMonth = _now.getMonth() + 1;
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MON_ABBR    = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+const MIN_WEEKS = 4;
+let MAX_WEEKS = 4;    // updated after data loads
+let zoomStart = 0;
+let zoomEnd   = 0;
+
+function getVW(){ return allWeeks.slice(zoomStart, zoomEnd + 1); }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function spByKey(k){ return allSports.find(s=>s.key===k); }
+function spMi(w,sp){ return sp.miKey?(w[sp.miKey]||0):0; }
+function spEl(w,sp){ return sp.elKey?(w[sp.elKey]||0):0; }
+function spHr(w,sp){ return w[sp.hrKey]||0; }
+function spVal(w,sp){
+  if(hiddenSports.has(sp.key)) return 0;
+  if(activeMetric==='mileage')   return spMi(w,sp);
+  if(activeMetric==='elevation') return spEl(w,sp);
+  return spHr(w,sp);
+}
+function weekVal(w){ return allSports.reduce((s,sp)=>s+spVal(w,sp),0); }
+function weekMi(w){ return allSports.reduce((s,sp)=>s+(hiddenSports.has(sp.key)?0:spMi(w,sp)),0); }
+function weekEl(w){ return allSports.reduce((s,sp)=>s+(hiddenSports.has(sp.key)?0:spEl(w,sp)),0); }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATS
+// ─────────────────────────────────────────────────────────────────────────────
+const UNITS={mileage:{w:'miles',a:'mi/wk'},elevation:{w:'ft',a:'ft/wk'},hours:{w:'hours',a:'hrs/wk'}};
+let selectedWeekData = null;
+
+function updateStats(){
+  if(activeMetric==='calendar') return;
+  const vw=getVW(), vals=vw.map(weekVal);
+  const u=UNITS[activeMetric], dp=activeMetric==='elevation'?0:1;
+  const nw=vw.length;
+  const rangeLabel = nw<=4?'1 mo': nw<=8?'2 mo': nw<=13?'3 mo': nw<=26?'6 mo':'1 yr';
+
+  if(selectedWeekData){
+    const val=weekVal(selectedWeekData);
+    document.getElementById('stat-week').textContent=val.toFixed(dp);
+    document.getElementById('stat-week-unit').textContent=u.w;
+    document.getElementById('stat-week-label').textContent=selectedWeekData.label;
+  } else {
+    document.getElementById('stat-week').textContent='—';
+    document.getElementById('stat-week-unit').textContent='';
+    document.getElementById('stat-week-label').textContent='click a bar';
+  }
+
+  document.getElementById('stat-avg').textContent=(vals.reduce((a,b)=>a+b)/vals.length).toFixed(dp);
+  document.getElementById('stat-best').textContent=Math.max(...vals).toFixed(dp);
+  document.getElementById('stat-avg-unit').textContent=`${u.a} · ${rangeLabel}`;
+  document.getElementById('stat-best-unit').textContent=u.w;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LEGEND
+// ─────────────────────────────────────────────────────────────────────────────
+function buildLegend(){
+  const el=document.getElementById('legend');
+  el.innerHTML='';
+  sportGroups.forEach(grp=>{
+    const row=document.createElement('div');
+    row.className='legend-group';
+    const lbl=document.createElement('span');
+    lbl.className='legend-group-label';
+    lbl.textContent=grp.label;
+    row.appendChild(lbl);
+    grp.sports.forEach(sp=>{
+      if(sp.key==='indoor_climb'&&activeMetric!=='hours') return;
+      const item=document.createElement('div');
+      item.className='legend-item'+(hiddenSports.has(sp.key)?' hidden':'');
+      item.innerHTML=`<div class="legend-swatch" style="background:${sp.color}"></div>${sp.label}`;
+      item.addEventListener('click',()=>{
+        hiddenSports.has(sp.key)?hiddenSports.delete(sp.key):hiddenSports.add(sp.key);
+        render();
+      });
+      row.appendChild(item);
+    });
+    el.appendChild(row);
+  });
+  if(activeMetric!=='calendar'){
+    const row=document.createElement('div');
+    row.className='legend-group';
+    const ovLabel=activeMetric==='mileage'?'Elev gain':'Miles';
+    row.innerHTML=`<span class="legend-group-label">Overlay</span><div class="legend-item"><div class="legend-swatch" style="background:#94a3b8"></div>${ovLabel}</div>`;
+    el.appendChild(row);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BAR CHART
+// ─────────────────────────────────────────────────────────────────────────────
+const NS='http://www.w3.org/2000/svg';
+function mk(tag,attrs){
+  const e=document.createElementNS(NS,tag);
+  Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));
+  return e;
+}
+
+function buildChart(){
+  hideTip();
+  const vw=getVW();
+  const wrap=document.getElementById('chart-wrap');
+  const W=Math.max(300,wrap.clientWidth||320);
+  const pL=36,pR=44,pT=20,pB=22;
+  const cH=232, totalH=pT+cH+pB;
+
+  const svg=document.getElementById('main-chart');
+  const defs=svg.querySelector('defs');
+  svg.innerHTML=''; svg.appendChild(defs);
+  svg.setAttribute('viewBox',`0 0 ${W} ${totalH}`);
+  svg.setAttribute('height',totalH);
+
+  const barTotals=vw.map(weekVal);
+  const gridMax=Math.ceil(Math.max(...barTotals,1)/10)*10;
+
+  const overlayVals=activeMetric==='mileage'?vw.map(weekEl):vw.map(weekMi);
+  const overlayMax=activeMetric==='mileage'
+    ?Math.ceil(Math.max(...overlayVals,1)/1000)*1000
+    :Math.ceil(Math.max(...overlayVals,1)/10)*10;
+
+  const leftLabel = activeMetric==='mileage' ? 'Miles' : activeMetric==='elevation' ? 'Elev (ft)' : 'Hours';
+  const lAxisLbl = mk('text',{
+    x: 8, y: pT + cH/2,
+    'text-anchor':'middle', class:'axis-label',
+    transform:`rotate(-90,8,${pT+cH/2})`
+  });
+  lAxisLbl.textContent = leftLabel;
+  svg.appendChild(lAxisLbl);
+
+  const rightLabel = activeMetric==='mileage' ? 'Elev Gain (ft)' : 'Miles';
+  const rAxisLbl = mk('text',{
+    x: W-8, y: pT + cH/2,
+    'text-anchor':'middle', class:'axis-label',
+    transform:`rotate(90,${W-8},${pT+cH/2})`
+  });
+  rAxisLbl.textContent = rightLabel;
+  svg.appendChild(rAxisLbl);
+
+  for(let i=0;i<=4;i++){
+    const y=pT+cH-(i/4)*cH;
+    const v=(i/4)*gridMax;
+    svg.appendChild(mk('line',{x1:pL,x2:W-pR,y1:y,y2:y,class:'grid-line'}));
+    const lt=mk('text',{x:pL-4,y:y+3,'text-anchor':'end',class:'grid-label'});
+    lt.textContent=activeMetric==='elevation'&&v>=1000?(v/1000).toFixed(1)+'k':Math.round(v);
+    svg.appendChild(lt);
+    const rv=(i/4)*overlayMax;
+    const rt=mk('text',{x:W-pR+4,y:y+3,'text-anchor':'start',class:'grid-label-r'});
+    rt.textContent=(activeMetric==='mileage'&&rv>=1000)?(rv/1000).toFixed(1)+'k':Math.round(rv);
+    svg.appendChild(rt);
+  }
+
+  const cW=W-pL-pR;
+  const barW=(cW/vw.length)*0.65;
+  const barGap=cW/vw.length;
+
+  const visibleSpan = zoomEnd - zoomStart + 1;
+  const useYearAxis = visibleSpan > 52;
+
+  if (useYearAxis) {
+    const yearGroups = {};
+    vw.forEach((w, i) => {
+      const y = w.year;
+      (yearGroups[y] = yearGroups[y] || []).push(i);
+    });
+    Object.values(yearGroups).forEach((idxs, gi) => {
+      if (gi === 0) return;
+      const dx = pL + idxs[0] * barGap;
+      svg.appendChild(mk('line', {x1:dx, x2:dx, y1:pT, y2:pT+cH+2, class:'month-divider'}));
+    });
+    Object.entries(yearGroups).forEach(([yr, idxs]) => {
+      const centerIdx = (idxs[0] + idxs.at(-1)) / 2;
+      const mx = pL + centerIdx * barGap + barGap / 2;
+      const lt = mk('text', {x:mx, y:pT+cH+14, 'text-anchor':'middle', class:'month-label'});
+      lt.textContent = yr;
+      svg.appendChild(lt);
+    });
+  } else {
+    const monthGroups = {};
+    vw.forEach((w, i) => {
+      const key = `${w.month} ${w.year}`;
+      (monthGroups[key] = monthGroups[key] || []).push(i);
+    });
+    Object.values(monthGroups).forEach((idxs, gi) => {
+      if (gi === 0) return;
+      const dx = pL + idxs[0] * barGap;
+      svg.appendChild(mk('line', {x1:dx, x2:dx, y1:pT, y2:pT+cH+2, class:'month-divider'}));
+    });
+    Object.entries(monthGroups).forEach(([key, idxs]) => {
+      const monthName = key.split(' ')[0];
+      const centerIdx = (idxs[0] + idxs.at(-1)) / 2;
+      const mx = pL + centerIdx * barGap + barGap / 2;
+      const lt = mk('text', {x:mx, y:pT+cH+14, 'text-anchor':'middle', class:'month-label'});
+      lt.textContent = monthName;
+      svg.appendChild(lt);
+    });
+  }
+
+  const overlayPts=[];
+  vw.forEach((w,i)=>{
+    const globalIdx = zoomStart + i;
+    const cx=pL+i*barGap+barGap/2;
+    let yBase=pT+cH;
+    const weekRects=[];
+    allSports.forEach(sp=>{
+      if(sp.key==='indoor_climb'&&activeMetric!=='hours') return;
+      const val=spVal(w,sp);
+      if(!val) return;
+      const bh=(val/gridMax)*cH;
+      const rect=mk('rect',{
+        x:cx-barW/2, y:yBase-bh, width:barW, height:bh,
+        fill:sp.color, stroke:'rgba(0,0,0,0.55)', 'stroke-width':'0.8', class:'bar-segment'
+      });
+      svg.appendChild(rect);
+      weekRects.push(rect);
+      yBase-=bh;
+    });
+    overlayPts.push({x:cx,y:pT+cH-(overlayVals[i]/overlayMax)*cH});
+
+    const hit=mk('rect',{x:cx-barGap/2,y:pT,width:barGap,height:cH,fill:'transparent'});
+    hit.style.cursor='pointer';
+    hit.addEventListener('click', ()=>showTip(w, overlayVals[i], weekRects, globalIdx));
+    hit.addEventListener('touchend', e=>{ e.preventDefault(); showTip(w, overlayVals[i], weekRects, globalIdx); }, {passive:false});
+    svg.appendChild(hit);
+  });
+
+  if(overlayPts.length>1){
+    const pts=overlayPts;
+    const aD=`M${pts[0].x},${pT+cH} ${pts.map(p=>`L${p.x},${p.y}`).join(' ')} L${pts.at(-1).x},${pT+cH} Z`;
+    svg.appendChild(mk('path',{d:aD,class:'elev-area'}));
+    svg.appendChild(mk('path',{d:pts.map((p,i)=>`${i?'L':'M'}${p.x},${p.y}`).join(' '),class:'elev-line'}));
+    pts.forEach(p=>svg.appendChild(mk('circle',{cx:p.x,cy:p.y,r:'2',class:'elev-dot'})));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TOOLTIP
+// ─────────────────────────────────────────────────────────────────────────────
+let selectedBarGroup = null;
+
+function showTip(w, overlayVal, barRects, weekIndex){
+  if(selectedBarGroup){
+    selectedBarGroup.forEach(r=>r.setAttribute('filter',''));
+    selectedBarGroup=null;
+  }
+  if(barRects){
+    barRects.forEach(r=>r.setAttribute('filter','brightness(1.4)'));
+    selectedBarGroup=barRects;
+  }
+
+  selectedWeekData = w;
+  updateStats();
+
+  const tt=document.getElementById('tooltip');
+  const isHr=activeMetric==='hours';
+
+  let html=`<div class="tt-header">
+    <div class="tt-week">${w.label}</div>
+    <div class="tt-close" id="tt-close">✕</div>
+  </div><div class="tt-body">`;
+
+  sportGroups.forEach(grp=>{
+    const sports=grp.sports.filter(sp=>{
+      if(sp.key==='indoor_climb'&&!isHr) return false;
+      return !hiddenSports.has(sp.key)&&spVal(w,sp)>0;
+    });
+    if(!sports.length) return;
+    const grpTotal=sports.reduce((s,sp)=>s+spVal(w,sp),0);
+    const grpD=isHr?grpTotal.toFixed(1)+'h':activeMetric==='elevation'?grpTotal.toLocaleString()+' ft':grpTotal.toFixed(1)+' mi';
+    html+=`<div class="tt-group">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+        <div class="tt-group-label">${grp.label}</div>
+        <div style="font-size:11px;font-weight:600;color:var(--text)">${grpD}</div>
+      </div>`;
+    sports.forEach(sp=>{
+      const val=spVal(w,sp);
+      const d=isHr?val.toFixed(1)+'h':activeMetric==='elevation'?val.toLocaleString()+' ft':val.toFixed(1)+' mi';
+      html+=`<div class="tt-row"><span class="tt-sport"><span class="dot" style="background:${sp.color}"></span>${sp.label}</span><span style="color:${sp.color}">${d}</span></div>`;
+    });
+    html+='</div>';
+  });
+  html+='</div>';
+
+  const tot=weekVal(w);
+  const totD=isHr?tot.toFixed(1)+' hrs':activeMetric==='elevation'?tot.toLocaleString()+' ft':tot.toFixed(1)+' mi';
+  const lbl=activeMetric==='mileage'?'⛰ Elevation Gain':'📍 Miles';
+  const ovD=activeMetric==='mileage'?overlayVal.toLocaleString()+' ft':overlayVal.toFixed(1)+' mi';
+  html+=`<div class="tt-total-row"><span>Total</span><span>${totD}</span></div>
+    <div class="tt-overlay-row"><span>${lbl}</span><span>${ovD}</span></div>`;
+
+  const acts=getWeekActivities(weekIndex);
+  if(acts.length){
+    html+=`<div class="tt-activities">
+      <div class="tt-act-header">Activities</div>`;
+    acts.forEach(a=>{
+      const sp=spByKey(a.sport);
+      const color=sp?sp.color:'#888';
+      const icon=sp?sp.icon:'·';
+      const miStr=a.mi!=null?a.mi.toFixed(1)+' mi':'—';
+      const elStr=a.elev!=null?a.elev.toLocaleString()+' ft':'—';
+      html+=`<div class="tt-act-row">
+        <div class="tt-act-name"><span style="font-size:11px">${icon}</span><span style="color:${color}">${a.name}</span></div>
+        <div class="tt-act-date">${a.date}</div>
+        <div class="tt-act-mi">${miStr}</div>
+        <div class="tt-act-el">${elStr}</div>
+      </div>`;
+    });
+    html+=`</div>`;
+  }
+
+  tt.innerHTML=html;
+  tt.classList.add('visible');
+  document.getElementById('tt-close').addEventListener('click', e=>{ e.stopPropagation(); hideTip(); });
+}
+
+function hideTip(){
+  document.getElementById('tooltip').classList.remove('visible');
+  if(selectedBarGroup){
+    selectedBarGroup.forEach(r=>r.setAttribute('filter',''));
+    selectedBarGroup=null;
+  }
+  selectedWeekData = null;
+  updateStats();
+}
+
+document.addEventListener('click', e=>{
+  const card=document.getElementById('chart-card');
+  if(!card.contains(e.target)){
+    hideTip();
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALENDAR
+// ─────────────────────────────────────────────────────────────────────────────
+function buildCalendar(){
+  document.getElementById('cal-month-title').textContent=`${MONTH_NAMES[calMonth-1]} ${calYear}`;
+  hideCalPopup();
+
+  const grid=document.getElementById('cal-grid');
+  grid.innerHTML='';
+
+  ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(d=>{
+    const cell=document.createElement('div');
+    cell.className='cal-dow';
+    cell.textContent=d;
+    grid.appendChild(cell);
+  });
+
+  const firstDow=new Date(calYear,calMonth-1,1).getDay();
+  const daysInMonth=new Date(calYear,calMonth,0).getDate();
+  const today=new Date();
+  const isCurrentMonth=today.getFullYear()===calYear&&today.getMonth()===calMonth-1;
+
+  const dayMap={};
+  const monthData=(calendarData[calYear]||{})[calMonth]||[];
+  monthData.forEach(entry=>{ dayMap[entry.day]=entry.acts; });
+
+  for(let i=0;i<firstDow;i++){
+    const e=document.createElement('div'); e.className='cal-day empty'; grid.appendChild(e);
+  }
+
+  for(let d=1;d<=daysInMonth;d++){
+    const cell=document.createElement('div');
+    const isToday=isCurrentMonth&&d===today.getDate();
+    cell.className='cal-day'+(isToday?' today':'');
+
+    const num=document.createElement('div');
+    num.className='cal-day-num';
+    num.textContent=d;
+    cell.appendChild(num);
+
+    const acts=dayMap[d]||[];
+    if(acts.length>0){
+      const actsEl=document.createElement('div');
+      actsEl.className='cal-activities';
+      acts.forEach(act=>{
+        const sp=spByKey(act.key);
+        if(!sp) return;
+        const strip=document.createElement('div');
+        strip.className='cal-act';
+        strip.style.background=sp.color;
+        const dark=isLight(sp.color)?'rgba(0,0,0,0.75)':'rgba(255,255,255,0.92)';
+        strip.style.color=dark;
+
+        const iconEl=document.createElement('span');
+        iconEl.className='cal-act-icon';
+        iconEl.textContent=sp.icon;
+        strip.appendChild(iconEl);
+        actsEl.appendChild(strip);
+      });
+      cell.appendChild(actsEl);
+
+      cell.style.cursor='pointer';
+      cell.addEventListener('click', e=>{
+        e.stopPropagation();
+        showCalPopup(d, acts);
+      });
+    }
+
+    grid.appendChild(cell);
+  }
+
+  const calLeg=document.getElementById('cal-legend');
+  calLeg.innerHTML='';
+  const usedKeys=new Set(Object.values(dayMap).flat().map(a=>a.key));
+  sportGroups.forEach(grp=>{
+    grp.sports.forEach(sp=>{
+      if(!usedKeys.has(sp.key)) return;
+      const item=document.createElement('div');
+      item.className='cal-legend-item';
+      item.innerHTML=`<div class="cal-legend-swatch" style="background:${sp.color}"></div>${sp.icon} ${sp.label}`;
+      calLeg.appendChild(item);
+    });
+  });
+}
+
+function showCalPopup(day, acts) {
+  const popup = document.getElementById('cal-popup');
+  const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const d = new Date(calYear, calMonth-1, day);
+  const dateLabel = `${dow[d.getDay()]}, ${MONTH_NAMES[calMonth-1]} ${day}`;
+
+  let html = `<div class="cal-popup-header">
+    <div class="cal-popup-date">${dateLabel}</div>
+    <div class="cal-popup-close" id="cal-popup-close">✕</div>
+  </div><div class="cal-popup-acts">`;
+
+  if (!acts || acts.length === 0) {
+    html += `<div class="cal-popup-empty">Rest day — no activities recorded</div>`;
+  } else {
+    acts.forEach(act => {
+      const sp = spByKey(act.key);
+      if (!sp) return;
+
+      const miVal   = act.mi   != null ? act.mi                                                     : '—';
+      const elevVal = act.elev != null ? (act.elev >= 1000 ? (act.elev/1000).toFixed(1)+'k' : act.elev) : '—';
+      const hrVal   = act.hr   != null ? act.hr                                                     : '—';
+      const statsHtml = `
+        <div class="cal-popup-stat"><div class="cal-popup-stat-val">${miVal}</div><div class="cal-popup-stat-lbl">Miles</div></div>
+        <div class="cal-popup-stat"><div class="cal-popup-stat-val">${elevVal}</div><div class="cal-popup-stat-lbl">Ft Gain</div></div>
+        <div class="cal-popup-stat"><div class="cal-popup-stat-val">${hrVal}</div><div class="cal-popup-stat-lbl">Hours</div></div>`;
+
+      html += `<div class="cal-popup-act">
+        <div class="cal-popup-act-bar" style="background:${sp.color}"></div>
+        <div class="cal-popup-act-body">
+          <div class="cal-popup-act-icon">${sp.icon}</div>
+          <div class="cal-popup-act-info">
+            <div class="cal-popup-act-name">${act.name || sp.label}</div>
+            <div class="cal-popup-act-stats">${statsHtml}</div>
+          </div>
+        </div>
+      </div>`;
+    });
+  }
+
+  html += `</div>`;
+  popup.innerHTML = html;
+  popup.classList.add('visible');
+  document.getElementById('cal-popup-close').addEventListener('click', e=>{ e.stopPropagation(); hideCalPopup(); });
+}
+
+function hideCalPopup() {
+  const popup = document.getElementById('cal-popup');
+  if (popup) popup.classList.remove('visible');
+}
+
+document.addEventListener('click', e=>{
+  const calCard = document.getElementById('cal-card');
+  if (calCard && !calCard.contains(e.target)) hideCalPopup();
+});
+
+function isLight(hex){
+  const h=hex.replace('#','');
+  const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);
+  return (0.299*r+0.587*g+0.114*b)>155;
+}
+
+document.getElementById('cal-prev').addEventListener('click',()=>{
+  calMonth--; if(calMonth<1){calMonth=12;calYear--;} buildCalendar();
+});
+document.getElementById('cal-next').addEventListener('click',()=>{
+  calMonth++; if(calMonth>12){calMonth=1;calYear++;} buildCalendar();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BREAKDOWN
+// ─────────────────────────────────────────────────────────────────────────────
+function buildBreakdown(){
+  const vw=getVW();
+  const isHr=activeMetric==='hours', isMi=activeMetric==='mileage';
+  const el=document.getElementById('breakdown');
+  el.innerHTML='';
+  const nw=vw.length;
+  const rangeLabel=nw<=4?'1 mo':nw<=8?'2 mo':nw<=13?'3 mo':nw<=26?'6 mo':'1 yr';
+  document.getElementById('bd-sub').textContent=`${rangeLabel} · ${isHr?'hours':isMi?'miles':'elevation gain'}`;
+
+  const totals={};
+  allSports.forEach(sp=>{ totals[sp.key]=vw.reduce((s,w)=>s+spVal(w,sp),0); });
+  const gMax=Math.max(...Object.values(totals),0.01);
+
+  sportGroups.forEach(grp=>{
+    const sports=grp.sports.filter(sp=>{
+      if(sp.key==='indoor_climb'&&!isHr) return false;
+      return totals[sp.key]>0;
+    });
+    if(!sports.length) return;
+
+    const grpTotal=sports.reduce((s,sp)=>s+totals[sp.key],0);
+    const grpDisplay=isHr?grpTotal.toFixed(1)+' hrs':isMi?grpTotal.toFixed(1)+' mi':grpTotal>=1000?(grpTotal/1000).toFixed(1)+'k ft':grpTotal.toFixed(0)+' ft';
+
+    const div=document.createElement('div');
+    div.className='bd-group';
+    div.innerHTML=`<div class="bd-group-header">
+      <div class="bd-group-label">${grp.label}</div>
+      <div class="bd-group-total">${grpDisplay}</div>
+    </div>`;
+
+    sports.forEach(sp=>{
+      const val=totals[sp.key];
+      const pct=(val/gMax)*100;
+      const display=isHr?val.toFixed(1)+' hrs':isMi?val.toFixed(1)+' mi':val>=1000?(val/1000).toFixed(1)+'k ft':val.toFixed(0)+' ft';
+      div.innerHTML+=`<div class="sport-row">
+        <div class="sport-icon">${sp.icon}</div>
+        <div class="sport-info">
+          <div class="sport-name-row" style="color:${sp.color}">${sp.label}</div>
+          <div class="sport-bar-track"><div class="sport-bar-fill" style="width:${pct}%;background:${sp.color}"></div></div>
+        </div>
+        <div class="sport-val" style="color:${sp.color}">${display}</div>
+      </div>`;
+    });
+    el.appendChild(div);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ZOOM INTERACTION
+// ─────────────────────────────────────────────────────────────────────────────
+function clampZoom(){
+  const span = zoomEnd - zoomStart;
+  if(zoomStart < 0){ zoomEnd = Math.min(allWeeks.length-1, zoomEnd - zoomStart); zoomStart = 0; }
+  if(zoomEnd >= allWeeks.length){ zoomStart = Math.max(0, zoomStart - (zoomEnd - allWeeks.length + 1)); zoomEnd = allWeeks.length-1; }
+  if(span < MIN_WEEKS-1){ const mid=Math.round((zoomStart+zoomEnd)/2); zoomStart=Math.max(0,mid-Math.floor((MIN_WEEKS-1)/2)); zoomEnd=Math.min(allWeeks.length-1,zoomStart+MIN_WEEKS-1); }
+}
+
+function applyZoom(deltaWeeks, anchorFrac){
+  const span = zoomEnd - zoomStart;
+  const newSpan = Math.max(MIN_WEEKS-1, Math.min(MAX_WEEKS-1, span + Math.round(deltaWeeks)));
+  const diff = newSpan - span;
+  zoomStart = Math.round(zoomStart - diff * anchorFrac);
+  zoomEnd   = zoomStart + newSpan;
+  clampZoom();
+  render();
+}
+
+document.getElementById('chart-wrap').addEventListener('wheel', e=>{
+  e.preventDefault();
+  const rect=e.currentTarget.getBoundingClientRect();
+  const frac=(e.clientX-rect.left)/rect.width;
+  const delta = e.deltaY > 0 ? 2 : -2;
+  applyZoom(delta, frac);
+}, {passive:false});
+
+let lastPinchDist=null;
+document.getElementById('chart-wrap').addEventListener('touchstart', e=>{
+  if(e.touches.length===2){
+    lastPinchDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+  }
+},{passive:true});
+document.getElementById('chart-wrap').addEventListener('touchmove', e=>{
+  if(e.touches.length===2 && lastPinchDist!==null){
+    const newDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    const ratio = lastPinchDist / newDist;
+    const span = zoomEnd - zoomStart;
+    const newSpan = Math.max(MIN_WEEKS-1, Math.min(MAX_WEEKS-1, Math.round(span * ratio)));
+    const diff = newSpan - span;
+    zoomStart = Math.round(zoomStart - diff * 0.5);
+    zoomEnd   = zoomStart + newSpan;
+    clampZoom();
+    render();
+    lastPinchDist = newDist;
+  }
+},{passive:true});
+document.getElementById('chart-wrap').addEventListener('touchend', ()=>{ lastPinchDist=null; },{passive:true});
+
+let dragStartX=null, dragStartZoomStart=null;
+document.getElementById('chart-wrap').addEventListener('touchstart', e=>{
+  if(e.touches.length===1){
+    dragStartX=e.touches[0].clientX;
+    dragStartZoomStart=zoomStart;
+  }
+},{passive:true});
+document.getElementById('chart-wrap').addEventListener('touchmove', e=>{
+  if(e.touches.length===1 && dragStartX!==null){
+    const rect=e.currentTarget.getBoundingClientRect();
+    const span=zoomEnd-zoomStart;
+    const dx=e.touches[0].clientX - dragStartX;
+    const weeksPerPx = span / rect.width;
+    const shift = Math.round(-dx * weeksPerPx);
+    zoomStart = Math.max(0, Math.min(allWeeks.length-1-span, dragStartZoomStart + shift));
+    zoomEnd = zoomStart + span;
+    render();
+  }
+},{passive:true});
+document.getElementById('chart-wrap').addEventListener('touchend', ()=>{ dragStartX=null; },{passive:true});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// METRIC + CALENDAR CONTROLS
+// ─────────────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.metric-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.metric-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    activeMetric=btn.dataset.metric;
+
+    const isCalendar=activeMetric==='calendar';
+    document.getElementById('stats-row').style.display=isCalendar?'none':'grid';
+    document.getElementById('chart-card').style.display=isCalendar?'none':'block';
+    document.getElementById('cal-card').style.display=isCalendar?'block':'none';
+    document.getElementById('breakdown-card').style.display=isCalendar?'none':'block';
+
+    if(isCalendar){ buildCalendar(); return; }
+
+    const titles={mileage:'Weekly Mileage',elevation:'Weekly Elevation Gain',hours:'Weekly Training Hours'};
+    document.getElementById('chart-title').textContent=titles[activeMetric];
+    render();
+  });
+});
+
+window.addEventListener('resize',()=>{ if(activeMetric!=='calendar') buildChart(); });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DATA TRANSFORMATION — /api/data response → dashboard structures
+// ─────────────────────────────────────────────────────────────────────────────
+const SPORT_FIELDS = {
+  road_run:      { mi:'road_run',      el:'road_runE',      hr:'road_runH'      },
+  trail_run:     { mi:'trail_run',     el:'trail_runE',     hr:'trail_runH'     },
+  hike:          { mi:'hike',          el:'hikeE',          hr:'hikeH'          },
+  outdoor_climb: { mi:'outdoor_climb', el:'outdoor_climbE', hr:'outdoor_climbH' },
+  indoor_climb:  { mi:null,            el:null,             hr:'indoor_climbH'  },
+  ski:           { mi:'ski',           el:'skiE',           hr:'skiH'           },
+  nordic:        { mi:'nordic',        el:'nordicE',        hr:'nordicH'        },
+  road_bike:     { mi:'road_bike',     el:'road_bikeE',     hr:'road_bikeH'     },
+  mtb:           { mi:'mtb',           el:'mtbE',           hr:'mtbH'           },
+};
+
+function processActivities(activities) {
+  // ── 1. Aggregate into weekly buckets ─────────────────────────────────────
+  const weekMap = new Map(); // "YYYY-MM-DD" → {weekObj, acts[]}
+
+  activities.forEach(act => {
+    const wk = act.week; // "YYYY-MM-DD" Monday
+    if (!weekMap.has(wk)) {
+      const d    = new Date(wk + 'T00:00:00');
+      const mon  = d.getMonth();
+      const wNum = Math.ceil(d.getDate() / 7);
+      weekMap.set(wk, {
+        weekObj: {
+          label: `${MON_ABBR[mon]} W${wNum}`,
+          month: MON_ABBR[mon],
+          year:  d.getFullYear(),
+          road_run:0, road_runE:0, road_runH:0,
+          trail_run:0, trail_runE:0, trail_runH:0,
+          hike:0, hikeE:0, hikeH:0,
+          outdoor_climb:0, outdoor_climbE:0, outdoor_climbH:0,
+          indoor_climbH:0,
+          ski:0, skiE:0, skiH:0,
+          nordic:0, nordicE:0, nordicH:0,
+          road_bike:0, road_bikeE:0, road_bikeH:0,
+          mtb:0, mtbE:0, mtbH:0,
+        },
+        acts: [],
+      });
+    }
+    const entry = weekMap.get(wk);
+    const f  = SPORT_FIELDS[act.sport];
+    const mi = act.distance_miles  || 0;
+    const el = act.elevation_feet  || 0;
+    const hr = act.duration_hours  || 0;
+    if (f) {
+      if (f.mi) entry.weekObj[f.mi] += mi;
+      if (f.el) entry.weekObj[f.el] += el;
+      if (f.hr) entry.weekObj[f.hr] += hr;
+    }
+    const ad = new Date(act.date);
+    entry.acts.push({
+      name:  act.name,
+      sport: act.sport,
+      date:  MON_ABBR[ad.getMonth()] + ' ' + ad.getDate(),
+      mi:    act.sport === 'indoor_climb' ? null : +mi.toFixed(1),
+      elev:  act.sport === 'indoor_climb' ? null : Math.round(el),
+    });
+  });
+
+  const sorted = [...weekMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  allWeeks     = sorted.map(([, e]) => e.weekObj);
+  weekActsData = sorted.map(([, e]) => e.acts);
+
+  // ── 2. Build calendarData ────────────────────────────────────────────────
+  const dayMap = {};
+  activities.forEach(act => {
+    const d  = new Date(act.date);
+    const yr = d.getFullYear(), mo = d.getMonth() + 1, dy = d.getDate();
+    const k  = `${yr}-${mo}-${dy}`;
+    if (!dayMap[k]) dayMap[k] = { yr, mo, dy, acts: [] };
+    dayMap[k].acts.push({
+      key:  act.sport,
+      name: act.name,
+      mi:   act.sport === 'indoor_climb' ? null : +act.distance_miles.toFixed(1),
+      elev: act.sport === 'indoor_climb' ? null : Math.round(act.elevation_feet),
+      hr:   +act.duration_hours.toFixed(2),
+    });
+  });
+  calendarData = {};
+  Object.values(dayMap).forEach(({ yr, mo, dy, acts }) => {
+    if (!calendarData[yr])     calendarData[yr] = {};
+    if (!calendarData[yr][mo]) calendarData[yr][mo] = [];
+    calendarData[yr][mo].push({ day: dy, acts });
+  });
+  Object.values(calendarData).forEach(y =>
+    Object.values(y).forEach(m => m.sort((a, b) => a.day - b.day))
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOOTSTRAP — check auth, fetch activities, render
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadStravaData() {
+  const overlay = document.getElementById('app-overlay');
+  const loadMsg = document.getElementById('overlay-loading');
+  const authMsg = document.getElementById('overlay-auth');
+
+  try {
+    // 1. Check auth state
+    const authRes = await fetch('/auth/status');
+    const auth    = await authRes.json();
+    if (!auth.loggedIn) {
+      loadMsg.style.display = 'none';
+      authMsg.style.display = 'flex';
+      return;
+    }
+
+    // 2. Fetch activity data (paginated on the server)
+    loadMsg.textContent = 'Loading your activities…';
+    const dataRes = await fetch('/api/data');
+    if (dataRes.status === 401) {
+      loadMsg.style.display = 'none';
+      authMsg.style.display = 'flex';
+      return;
+    }
+    const { activities } = await dataRes.json();
+    if (!activities || activities.length === 0) {
+      loadMsg.textContent = 'No activities found on your Strava account.';
+      return;
+    }
+
+    // 3. Transform into dashboard structures
+    processActivities(activities);
+
+    // 4. Init zoom to last 4 weeks
+    MAX_WEEKS = allWeeks.length;
+    zoomEnd   = allWeeks.length - 1;
+    zoomStart = Math.max(0, allWeeks.length - 4);
+
+    // 5. Init calendar to current month
+    const now = new Date();
+    calYear  = now.getFullYear();
+    calMonth = now.getMonth() + 1;
+
+    // 6. Hide overlay and render
+    overlay.style.display = 'none';
+    render();
+
+  } catch (err) {
+    loadMsg.textContent = 'Failed to load data: ' + err.message;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCROLLBAR
+// ─────────────────────────────────────────────────────────────────────────────
+function updateScrollbar() {
+  if (allWeeks.length === 0) return;
+  const thumb = document.getElementById('chart-scrollbar-thumb');
+  if (!thumb) return;
+  const leftPct  = (zoomStart / allWeeks.length) * 100;
+  const widthPct = ((zoomEnd - zoomStart + 1) / allWeeks.length) * 100;
+  thumb.style.left  = leftPct  + '%';
+  thumb.style.width = widthPct + '%';
+}
+
+(function initScrollbar() {
+  const track = document.getElementById('chart-scrollbar');
+  const thumb = document.getElementById('chart-scrollbar-thumb');
+  let dragging = false, startX = 0, startZoomStart = 0;
+
+  thumb.addEventListener('mousedown', e => {
+    e.preventDefault();
+    dragging = true;
+    startX = e.clientX;
+    startZoomStart = zoomStart;
+    thumb.classList.add('dragging');
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const trackW = track.getBoundingClientRect().width;
+    const span   = zoomEnd - zoomStart;
+    const shift  = Math.round(((e.clientX - startX) / trackW) * allWeeks.length);
+    zoomStart = Math.max(0, Math.min(allWeeks.length - 1 - span, startZoomStart + shift));
+    zoomEnd   = zoomStart + span;
+    render();
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (dragging) { dragging = false; thumb.classList.remove('dragging'); }
+  });
+
+  // Click on track (not thumb) to jump
+  track.addEventListener('click', e => {
+    if (e.target === thumb) return;
+    const rect  = track.getBoundingClientRect();
+    const frac  = (e.clientX - rect.left) / rect.width;
+    const span  = zoomEnd - zoomStart;
+    zoomStart = Math.max(0, Math.min(allWeeks.length - 1 - span, Math.round(frac * allWeeks.length - span / 2)));
+    zoomEnd   = zoomStart + span;
+    render();
+  });
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+function render(){ updateStats(); buildLegend(); buildChart(); buildBreakdown(); updateScrollbar(); }
+loadStravaData();
+</script>
+</body>
+</html>
