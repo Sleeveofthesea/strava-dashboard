@@ -7,14 +7,15 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 app.set('trust proxy', 1); // required for secure cookies behind Railway/Render proxy
 
-// Session store — persists across restarts using SQLite
+// Session store — use /tmp on Render (read-only fs), local ./sessions in dev
 const SQLiteStore = require('connect-sqlite3')(session);
+const sessionsDir = process.env.NODE_ENV === 'production' ? '/tmp/sessions' : './sessions';
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use(session({
-  store: new SQLiteStore({ db: 'sessions.db', dir: './sessions' }),
+  store: new SQLiteStore({ db: 'sessions.db', dir: sessionsDir }),
   secret: process.env.SESSION_SECRET || 'dev-secret',
   resave: false,
   saveUninitialized: false,
@@ -39,7 +40,7 @@ app.get('*', (req, res) => {
 
 // Ensure sessions directory exists before starting
 const fs = require('fs');
-if (!fs.existsSync('./sessions')) fs.mkdirSync('./sessions');
+if (!fs.existsSync(sessionsDir)) fs.mkdirSync(sessionsDir, { recursive: true });
 
 app.listen(PORT, () => {
   console.log(`Strava Dashboard running at http://localhost:${PORT}`);
