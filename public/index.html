@@ -963,13 +963,21 @@ document.getElementById('chart-wrap').addEventListener('wheel', e=>{
   applyZoom(delta, frac);
 }, {passive:false});
 
-let lastPinchDist=null;
+let lastPinchDist=null, dragStartX=null, dragStartZoomStart=null;
+
 document.getElementById('chart-wrap').addEventListener('touchstart', e=>{
   if(e.touches.length===2){
     lastPinchDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    dragStartX=null;
+  } else if(e.touches.length===1){
+    dragStartX=e.touches[0].clientX;
+    dragStartZoomStart=zoomStart;
+    lastPinchDist=null;
   }
-},{passive:true});
+},{passive:false});
+
 document.getElementById('chart-wrap').addEventListener('touchmove', e=>{
+  e.preventDefault();
   if(e.touches.length===2 && lastPinchDist!==null){
     const newDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
     const ratio = lastPinchDist / newDist;
@@ -981,19 +989,7 @@ document.getElementById('chart-wrap').addEventListener('touchmove', e=>{
     clampZoom();
     render();
     lastPinchDist = newDist;
-  }
-},{passive:true});
-document.getElementById('chart-wrap').addEventListener('touchend', ()=>{ lastPinchDist=null; },{passive:true});
-
-let dragStartX=null, dragStartZoomStart=null;
-document.getElementById('chart-wrap').addEventListener('touchstart', e=>{
-  if(e.touches.length===1){
-    dragStartX=e.touches[0].clientX;
-    dragStartZoomStart=zoomStart;
-  }
-},{passive:true});
-document.getElementById('chart-wrap').addEventListener('touchmove', e=>{
-  if(e.touches.length===1 && dragStartX!==null){
+  } else if(e.touches.length===1 && dragStartX!==null){
     const rect=e.currentTarget.getBoundingClientRect();
     const span=zoomEnd-zoomStart;
     const dx=e.touches[0].clientX - dragStartX;
@@ -1003,8 +999,11 @@ document.getElementById('chart-wrap').addEventListener('touchmove', e=>{
     zoomEnd = zoomStart + span;
     render();
   }
+},{passive:false});
+
+document.getElementById('chart-wrap').addEventListener('touchend', ()=>{
+  lastPinchDist=null; dragStartX=null;
 },{passive:true});
-document.getElementById('chart-wrap').addEventListener('touchend', ()=>{ dragStartX=null; },{passive:true});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // METRIC + CALENDAR CONTROLS
@@ -1227,6 +1226,30 @@ function updateScrollbar() {
     zoomStart = Math.max(0, Math.min(allWeeks.length - 1 - span, Math.round(frac * allWeeks.length - span / 2)));
     zoomEnd   = zoomStart + span;
     render();
+  });
+
+  // Touch support for scrollbar thumb
+  thumb.addEventListener('touchstart', e => {
+    e.preventDefault();
+    dragging = true;
+    startX = e.touches[0].clientX;
+    startZoomStart = zoomStart;
+    thumb.classList.add('dragging');
+  }, {passive:false});
+
+  document.addEventListener('touchmove', e => {
+    if (!dragging) return;
+    e.preventDefault();
+    const trackW = track.getBoundingClientRect().width;
+    const span   = zoomEnd - zoomStart;
+    const shift  = Math.round(((e.touches[0].clientX - startX) / trackW) * allWeeks.length);
+    zoomStart = Math.max(0, Math.min(allWeeks.length - 1 - span, startZoomStart + shift));
+    zoomEnd   = zoomStart + span;
+    render();
+  }, {passive:false});
+
+  document.addEventListener('touchend', () => {
+    if (dragging) { dragging = false; thumb.classList.remove('dragging'); }
   });
 })();
 
