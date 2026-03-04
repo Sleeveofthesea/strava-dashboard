@@ -2,14 +2,18 @@ require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.set('trust proxy', 1); // required for secure cookies behind Railway/Render proxy
 
+// Create sessions directory BEFORE initializing the store
+const sessionsDir = process.env.NODE_ENV === 'production' ? '/tmp/sessions' : './sessions';
+if (!fs.existsSync(sessionsDir)) fs.mkdirSync(sessionsDir, { recursive: true });
+
 // Session store — use /tmp on Render (read-only fs), local ./sessions in dev
 const SQLiteStore = require('connect-sqlite3')(session);
-const sessionsDir = process.env.NODE_ENV === 'production' ? '/tmp/sessions' : './sessions';
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -37,10 +41,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-
-// Ensure sessions directory exists before starting
-const fs = require('fs');
-if (!fs.existsSync(sessionsDir)) fs.mkdirSync(sessionsDir, { recursive: true });
 
 app.listen(PORT, () => {
   console.log(`Strava Dashboard running at http://localhost:${PORT}`);
