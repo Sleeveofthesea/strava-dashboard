@@ -83,6 +83,9 @@
   .chart-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
   .chart-title { font-family: 'Fraunces', serif; font-weight: 300; font-size: 19px; }
   .zoom-hint { font-size: 10px; color: var(--muted); font-weight: 500; align-self: center; letter-spacing: 0.04em; }
+  .zoom-btns { display: flex; gap: 4px; align-items: center; }
+  .zoom-btn { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 16px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; user-select: none; }
+  .zoom-btn:active { background: var(--border); }
 
   .controls { display: flex; gap: 5px; flex-wrap: wrap; }
   .pill-group { display: flex; gap: 2px; background: var(--surface2); border-radius: 8px; padding: 3px; }
@@ -312,7 +315,13 @@
 <div class="chart-card" id="chart-card">
   <div class="chart-header">
     <div class="chart-title" id="chart-title">Weekly Mileage</div>
-    <div class="zoom-hint" id="zoom-hint">pinch or scroll to zoom</div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="zoom-hint" id="zoom-hint">scroll to zoom</div>
+      <div class="zoom-btns">
+        <button class="zoom-btn" id="zoom-out-btn">−</button>
+        <button class="zoom-btn" id="zoom-in-btn">+</button>
+      </div>
+    </div>
   </div>
   <div class="chart-wrap" id="chart-wrap">
     <svg class="chart" id="main-chart">
@@ -954,6 +963,9 @@ function applyZoom(deltaWeeks, anchorFrac){
   clampZoom();
   render();
 }
+
+document.getElementById('zoom-in-btn').addEventListener('click', ()=>{ applyZoom(-4, 0.5); });
+document.getElementById('zoom-out-btn').addEventListener('click', ()=>{ applyZoom(4, 0.5); });
 
 document.getElementById('chart-wrap').addEventListener('wheel', e=>{
   e.preventDefault();
