@@ -94,7 +94,7 @@
   .pill.active { background: var(--border); color: var(--text); font-weight: 600; }
 
   /* ── SVG chart ───────────────────────────────────────── */
-  .chart-wrap { position: relative; width: 100%; }
+  .chart-wrap { position: relative; width: 100%; touch-action: none; }
   svg.chart { display: block; overflow: visible; }
   .grid-line    { stroke: var(--border); stroke-width: 1; }
   .grid-label   { fill: #7a8494; font-family: 'DM Mono',monospace; font-size: 10px; font-weight: 500; }
@@ -244,12 +244,12 @@
 
   /* ── Chart scrollbar ─────────────────────────────────── */
   .chart-scrollbar {
-    position: relative; height: 8px; margin-top: 10px;
-    background: var(--surface2); border-radius: 4px; cursor: pointer;
+    position: relative; height: 12px; margin-top: 10px;
+    background: var(--surface2); border-radius: 6px; cursor: pointer;
   }
   .chart-scrollbar-thumb {
-    position: absolute; height: 100%; min-width: 24px;
-    background: var(--muted); border-radius: 4px;
+    position: absolute; height: 100%; min-width: 36px;
+    background: var(--muted); border-radius: 6px;
     cursor: grab; transition: background 0.15s;
   }
   .chart-scrollbar-thumb:hover { background: #8891a0; }
